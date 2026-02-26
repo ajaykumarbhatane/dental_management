@@ -148,6 +148,16 @@ AUTH_PASSWORD_VALIDATORS = [
 AUTH_USER_MODEL = 'users.CustomUser'
 
 # ============================================================================
+# STATIC FILES & MEDIA
+# ============================================================================
+STATIC_URL = '/static/'
+STATIC_ROOT = BASE_DIR / 'static'
+STATICFILES_DIRS = [BASE_DIR / 'staticfiles'] if (BASE_DIR / 'staticfiles').exists() else []
+
+MEDIA_URL = '/media/'
+MEDIA_ROOT = BASE_DIR / 'media'
+
+# ============================================================================
 # INTERNATIONALIZATION
 # ============================================================================
 LANGUAGE_CODE = 'en-us'

@@ -13,6 +13,8 @@ class PatientProfileSerializer(serializers.ModelSerializer):
     Serializer for PatientProfile model.
     """
     age = serializers.ReadOnlyField()
+    # The actual CustomUser ID to use when creating treatments
+    user_id = serializers.IntegerField(source='user.id', read_only=True)
     # expose user attributes directly for frontend convenience
     first_name = serializers.CharField(source='user.first_name', read_only=True)
     last_name = serializers.CharField(source='user.last_name', read_only=True)
@@ -27,6 +29,7 @@ class PatientProfileSerializer(serializers.ModelSerializer):
         fields = [
             'id',
             'user',
+            'user_id',
             'first_name',
             'last_name',
             'email',
@@ -43,7 +46,7 @@ class PatientProfileSerializer(serializers.ModelSerializer):
             'created_at',
             'updated_at',
         ]
-        read_only_fields = ['id', 'user', 'clinic', 'first_name', 'last_name', 'email', 'phone', 'user_email', 'user_full_name', 'clinic_name', 'age', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'user', 'user_id', 'clinic', 'first_name', 'last_name', 'email', 'phone', 'user_email', 'user_full_name', 'clinic_name', 'age', 'created_at', 'updated_at']
 
 
 class PatientDetailSerializer(serializers.ModelSerializer):
@@ -53,6 +56,8 @@ class PatientDetailSerializer(serializers.ModelSerializer):
     user = CustomUserSerializer(read_only=True)
     age = serializers.ReadOnlyField()
     active_treatments_count = serializers.ReadOnlyField()
+    # The actual CustomUser ID to use when creating treatments
+    user_id = serializers.IntegerField(source='user.id', read_only=True)
     # convenience fields copied from user
     first_name = serializers.CharField(source='user.first_name', read_only=True)
     last_name = serializers.CharField(source='user.last_name', read_only=True)
@@ -67,6 +72,7 @@ class PatientDetailSerializer(serializers.ModelSerializer):
         fields = [
             'id',
             'user',
+            'user_id',
             'first_name',
             'last_name',
             'email',
@@ -85,7 +91,7 @@ class PatientDetailSerializer(serializers.ModelSerializer):
             'updated_at',
         ]
         read_only_fields = [
-            'id', 'user', 'clinic', 'medical_history', 'allergies',
+            'id', 'user', 'user_id', 'clinic', 'medical_history', 'allergies',
             'active_treatments_count', 'medical_summary', 'treatments', 'created_at', 'updated_at'
         ]
 

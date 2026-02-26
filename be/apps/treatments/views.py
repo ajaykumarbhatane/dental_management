@@ -8,6 +8,7 @@ Provides:
 """
 
 from rest_framework import viewsets, status
+from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
@@ -54,6 +55,7 @@ class TreatmentViewSet(viewsets.ModelViewSet):
     """
 
     serializer_class = TreatmentSerializer
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
     permission_classes = [IsAuthenticated, IsSameClinic]
     filterset_class = TreatmentFilter
     search_fields = [
@@ -121,6 +123,31 @@ class TreatmentViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         """Create treatment with audit logging."""
         serializer.save()
+
+    def create(self, request, *args, **kwargs):
+        """Override create to sanitize upload_image payloads from some frontends.
+
+        Some clients send an empty object (`{}`) for file fields when no file
+        is selected which DRF's ImageField can reject. Normalize `{}` and
+        empty strings to `None` so our serializer accepts them.
+        """
+        data = request.data.copy()
+        ui = data.get('upload_image', None)
+
+        # If upload_image is an empty dict-like or the string representation
+        # of an empty object, treat it as None.
+        if ui == {} or ui == '' or ui == 'null' or ui == 'None' or ui == '[]':
+            data['upload_image'] = None
+
+        # Some parsers produce an actual Python dict for empty JSON object
+        if isinstance(ui, dict) and not ui:
+            data['upload_image'] = None
+
+        serializer = self.get_serializer(data=data)
+        serializer.is_valid(raise_exception=True)
+        self.perform_create(serializer)
+        headers = self.get_success_headers(serializer.data)
+        return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
 
     def perform_update(self, serializer):
         """Update treatment with audit logging."""

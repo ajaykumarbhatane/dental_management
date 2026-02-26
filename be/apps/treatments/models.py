@@ -111,7 +111,7 @@ class Treatment(models.Model):
 
     # Image Upload (Before/After documentation)
     upload_image = models.ImageField(
-        upload_to='treatments/%Y/%m/',
+        upload_to='treatments/',
         blank=True,
         null=True,
         validators=[
