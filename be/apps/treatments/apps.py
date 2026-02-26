@@ -1,0 +1,11 @@
+"""
+Django AppConfig for treatments app.
+"""
+from django.apps import AppConfig
+
+
+class TreatmentsConfig(AppConfig):
+    """Configuration for the treatments application."""
+    default_auto_field = 'django.db.models.BigAutoField'
+    name = 'apps.treatments'
+    verbose_name = 'Treatment Management'
