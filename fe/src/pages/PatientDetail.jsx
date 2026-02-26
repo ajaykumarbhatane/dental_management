@@ -7,6 +7,7 @@ import Badge from '../components/Badge';
 import Avatar from '../components/Avatar';
 import LoadingSpinner from '../components/LoadingSpinner';
 import Table from '../components/Table';
+import Modal from '../components/Modal';
 import { patientService } from '../services/api';
 import { useToast } from '../hooks';
 import { formatDate } from '../utils/helpers';
@@ -27,6 +28,8 @@ const PatientDetail = () => {
   const { success, error: showError } = useToast();
   const [patient, setPatient] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [selectedTreatment, setSelectedTreatment] = useState(null);
+  const [treatmentDetailOpen, setTreatmentDetailOpen] = useState(false);
 
   useEffect(() => {
     const fetchPatient = async () => {
@@ -62,11 +65,39 @@ const PatientDetail = () => {
   }
 
   const treatmentColumns = [
+    { 
+      key: 'visit_number',
+      label: 'Visit Number',
+      render: (_, treatment, index) => (
+        <span className="font-semibold text-primary-600">{index + 1}</span>
+      )
+    },
     { key: 'treatment_type', label: 'Treatment' },
-    { key: 'status', label: 'Status', render: (status) => (
-      <Badge variant={status === 'COMPLETED' ? 'success' : 'info'}>{status}</Badge>
-    )},
-    { key: 'created_at', label: 'Date', render: (date) => formatDate(date) },
+    { 
+      key: 'status', 
+      label: 'Status', 
+      render: (status) => (
+        <Badge variant={status === 'COMPLETED' ? 'success' : 'info'}>{status}</Badge>
+      )
+    },
+    {
+      key: 'visited',
+      label: 'Visited',
+      render: (_, treatment) => {
+        const isVisited = treatment.status === 'COMPLETED' || (treatment.created_at && new Date(treatment.created_at) < new Date());
+        return <span className={isVisited ? 'text-green-600 font-medium' : 'text-red-600 font-medium'}>{isVisited ? 'True' : 'False'}</span>;
+      }
+    },
+    { 
+      key: 'created_at', 
+      label: 'Visited Date', 
+      render: (date) => formatDate(date) 
+    },
+    { 
+      key: 'next_visit_date', 
+      label: 'Next Visit Date', 
+      render: (date) => date ? formatDate(date) : '-' 
+    },
   ];
 
   return (
@@ -164,6 +195,10 @@ const PatientDetail = () => {
               columns={treatmentColumns}
               data={patient.treatments || []}
               isResponsive={true}
+              onRowClick={(treatment) => {
+                setSelectedTreatment(treatment);
+                setTreatmentDetailOpen(true);
+              }}
             />
           </Card.Body>
         </Card>
@@ -178,16 +213,24 @@ const PatientDetail = () => {
               <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                 {patient.treatments
                   .filter(t => t.upload_image)
-                  .map((treatment) => (
-                    <div key={treatment.id} className="rounded-lg overflow-hidden border border-gray-200">
+                  .map((treatment, index) => (
+                    <div 
+                      key={treatment.id} 
+                      className="rounded-lg overflow-hidden border border-gray-200 cursor-pointer hover:shadow-lg transition-shadow"
+                      onClick={() => {
+                        setSelectedTreatment(treatment);
+                        setTreatmentDetailOpen(true);
+                      }}
+                    >
                       <img
                         src={getImageUrl(treatment.upload_image)}
                         alt={`${treatment.treatment_type} treatment`}
                         className="object-cover h-40 w-full"
                       />
-                      <div className="p-2 bg-gray-50 text-xs text-gray-600">
+                      <div className="p-2 bg-gray-50 text-xs text-gray-600 space-y-1">
+                        <p className="font-medium text-red-600">Visit Number: {index + 1}</p>
                         <p className="font-medium">{treatment.treatment_type}</p>
-                        <p>{formatDate(treatment.created_at)}</p>
+                        <p>Visited Date: {formatDate(treatment.created_at)}</p>
                       </div>
                     </div>
                   ))
@@ -199,6 +242,84 @@ const PatientDetail = () => {
           </Card.Body>
         </Card>
       </div>
+
+      {/* Treatment Detail Modal */}
+      <Modal
+        isOpen={treatmentDetailOpen}
+        onClose={() => {
+          setTreatmentDetailOpen(false);
+          setSelectedTreatment(null);
+        }}
+        title="Treatment Details"
+        size="lg"
+        footer={
+          <Button
+            variant="secondary"
+            onClick={() => {
+              setTreatmentDetailOpen(false);
+              setSelectedTreatment(null);
+            }}
+          >
+            Close
+          </Button>
+        }
+      >
+        {selectedTreatment && (
+          <div className="space-y-6">
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+              <div>
+                <p className="text-sm text-gray-600">Treatment Type</p>
+                <p className="font-semibold text-lg">{selectedTreatment.treatment_type}</p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-600">Status</p>
+                <Badge variant={selectedTreatment.status === 'COMPLETED' ? 'success' : 'info'} className="mt-1">
+                  {selectedTreatment.status}
+                </Badge>
+              </div>
+              <div>
+                <p className="text-sm text-gray-600">Visited Date</p>
+                <p className="font-medium">{formatDate(selectedTreatment.created_at)}</p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-600">Next Visit Date</p>
+                <p className="font-medium">{selectedTreatment.next_visit_date ? formatDate(selectedTreatment.next_visit_date) : '-'}</p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-600">Doctor</p>
+                <p className="font-medium">{selectedTreatment.doctor_name || 'Not assigned'}</p>
+              </div>
+            </div>
+
+            <div>
+              <p className="text-sm text-gray-600 mb-2">Treatment Information</p>
+              <p className="font-medium text-gray-900 bg-gray-50 p-3 rounded-lg">
+                {selectedTreatment.treatment_information}
+              </p>
+            </div>
+
+            {selectedTreatment.treatment_findings && (
+              <div>
+                <p className="text-sm text-gray-600 mb-2">Clinical Findings</p>
+                <p className="font-medium text-gray-900 bg-gray-50 p-3 rounded-lg">
+                  {selectedTreatment.treatment_findings}
+                </p>
+              </div>
+            )}
+
+            {selectedTreatment.upload_image && (
+              <div>
+                <p className="text-sm text-gray-600 mb-2">Treatment Image</p>
+                <img 
+                  src={getImageUrl(selectedTreatment.upload_image)}
+                  alt="Treatment" 
+                  className="rounded-lg max-h-96 w-full object-cover border border-gray-200"
+                />
+              </div>
+            )}
+          </div>
+        )}
+      </Modal>
     </MainLayout>
   );
 };
