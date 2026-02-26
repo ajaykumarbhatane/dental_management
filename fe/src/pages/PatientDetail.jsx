@@ -5,15 +5,21 @@ import Card from '../components/Card';
 import Button from '../components/Button';
 import Badge from '../components/Badge';
 import Avatar from '../components/Avatar';
-import Input from '../components/Input';
-import Textarea from '../components/Textarea';
-import Modal from '../components/Modal';
-import FileUpload from '../components/FileUpload';
 import LoadingSpinner from '../components/LoadingSpinner';
 import Table from '../components/Table';
 import { patientService } from '../services/api';
 import { useToast } from '../hooks';
 import { formatDate } from '../utils/helpers';
+
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api';
+
+// Helper to construct full image URL
+const getImageUrl = (imageUrl) => {
+  if (!imageUrl) return null;
+  if (imageUrl.startsWith('http')) return imageUrl;
+  const serverBase = API_BASE_URL.replace('/api', '');
+  return `${serverBase}${imageUrl}`;
+};
 
 const PatientDetail = () => {
   const { id } = useParams();
@@ -21,8 +27,6 @@ const PatientDetail = () => {
   const { success, error: showError } = useToast();
   const [patient, setPatient] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [imageUploadModal, setImageUploadModal] = useState(false);
-  const [uploading, setUploading] = useState(false);
 
   useEffect(() => {
     const fetchPatient = async () => {
@@ -38,23 +42,7 @@ const PatientDetail = () => {
     };
 
     fetchPatient();
-  }, [id, navigate, showError]);
-
-  const handleImageUpload = async (file) => {
-    setUploading(true);
-    try {
-      await patientService.uploadImage(id, file);
-      success('Image uploaded successfully');
-      setImageUploadModal(false);
-      // Refresh patient data
-      const response = await patientService.getById(id);
-      setPatient(response.data);
-    } catch (error) {
-      showError('Failed to upload image');
-    } finally {
-      setUploading(false);
-    }
-  };
+  }, [id]);
 
   if (loading) {
     return <LoadingSpinner />;
@@ -74,11 +62,11 @@ const PatientDetail = () => {
   }
 
   const treatmentColumns = [
-    { key: 'name', label: 'Treatment' },
+    { key: 'treatment_type', label: 'Treatment' },
     { key: 'status', label: 'Status', render: (status) => (
-      <Badge variant={status === 'completed' ? 'success' : 'info'}>{status}</Badge>
+      <Badge variant={status === 'COMPLETED' ? 'success' : 'info'}>{status}</Badge>
     )},
-    { key: 'date', label: 'Date', render: (date) => formatDate(date) },
+    { key: 'created_at', label: 'Date', render: (date) => formatDate(date) },
   ];
 
   return (
@@ -180,56 +168,37 @@ const PatientDetail = () => {
           </Card.Body>
         </Card>
 
-        {/* Images */}
+        {/* Images from Treatments */}
         <Card>
           <Card.Header>
-            <div className="flex items-center justify-between">
-              <h3 className="font-semibold text-gray-900">Medical Images</h3>
-              <Button size="sm" onClick={() => setImageUploadModal(true)}>
-                + Upload Image
-              </Button>
-            </div>
+            <h3 className="font-semibold text-gray-900">Treatment Images</h3>
           </Card.Header>
           <Card.Body>
-            {patient.images && patient.images.length > 0 ? (
+            {patient.treatments && patient.treatments.some(t => t.upload_image) ? (
               <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                {patient.images.map((img) => (
-                  <img
-                    key={img.id}
-                    src={img.image}
-                    alt="Patient"
-                    className="rounded-lg object-cover h-40 w-full"
-                  />
-                ))}
+                {patient.treatments
+                  .filter(t => t.upload_image)
+                  .map((treatment) => (
+                    <div key={treatment.id} className="rounded-lg overflow-hidden border border-gray-200">
+                      <img
+                        src={getImageUrl(treatment.upload_image)}
+                        alt={`${treatment.treatment_type} treatment`}
+                        className="object-cover h-40 w-full"
+                      />
+                      <div className="p-2 bg-gray-50 text-xs text-gray-600">
+                        <p className="font-medium">{treatment.treatment_type}</p>
+                        <p>{formatDate(treatment.created_at)}</p>
+                      </div>
+                    </div>
+                  ))
+                }
               </div>
             ) : (
-              <p className="text-gray-600 text-center py-8">No images uploaded</p>
+              <p className="text-gray-600 text-center py-8">No treatment images uploaded</p>
             )}
           </Card.Body>
         </Card>
       </div>
-
-      {/* Image Upload Modal */}
-      <Modal
-        isOpen={imageUploadModal}
-        onClose={() => setImageUploadModal(false)}
-        title="Upload Medical Image"
-        footer={
-          <>
-            <Button variant="secondary" onClick={() => setImageUploadModal(false)}>
-              Cancel
-            </Button>
-            <Button loading={uploading}>Upload</Button>
-          </>
-        }
-      >
-        <FileUpload
-          label="Select image to upload"
-          onUpload={handleImageUpload}
-          accept="image/*"
-          helperText="Max file size: 5MB"
-        />
-      </Modal>
     </MainLayout>
   );
 };

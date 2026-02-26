@@ -15,6 +15,17 @@ import { useToast } from '../hooks';
 import { useForm } from 'react-hook-form';
 import { formatDate, getTreatmentStatus } from '../utils/helpers';
 
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api';
+
+// Helper to construct full image URL
+const getImageUrl = (imageUrl) => {
+  if (!imageUrl) return null;
+  if (imageUrl.startsWith('http')) return imageUrl;
+  // Remove /api from base URL to get server URL
+  const serverBase = API_BASE_URL.replace('/api', '');
+  return `${serverBase}${imageUrl}`;
+};
+
 const Treatments = () => {
   const { success, error: showError } = useToast();
   const [treatments, setTreatments] = useState([]);
@@ -24,6 +35,9 @@ const Treatments = () => {
   const [filterStatus, setFilterStatus] = useState('');
   const [addModalOpen, setAddModalOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [imageFile, setImageFile] = useState(null);
+  const [selectedTreatment, setSelectedTreatment] = useState(null);
+  const [detailModalOpen, setDetailModalOpen] = useState(false);
 
   const { register, handleSubmit, reset, formState: { errors } } = useForm({
     defaultValues: {
@@ -79,24 +93,29 @@ const Treatments = () => {
   const onSubmit = async (data) => {
     setSubmitting(true);
     try {
-      // map form fields to API payload
-      const payload = {
-        patient: data.patient,
-        treatment_type: data.treatment_type,
-        status: data.status,
-        next_visit_date: data.next_visit_date,
-        treatment_information: data.treatment_information,
-      };
+      const formData = new FormData();
+      formData.append('patient', parseInt(data.patient, 10)); // Convert to integer
+      formData.append('treatment_type', data.treatment_type);
+      formData.append('status', data.status);
+      formData.append('next_visit_date', data.next_visit_date);
+      formData.append('treatment_information', data.treatment_information);
+      
+      // Only append image if one was actually selected
+      if (imageFile) {
+        formData.append('upload_image', imageFile);
+      }
 
-      await treatmentService.create(payload);
+      await treatmentService.create(formData);
+
       success('Treatment recorded successfully');
       setAddModalOpen(false);
       reset();
+      setImageFile(null);
       // Refresh list
       const response = await treatmentService.getAll();
       setTreatments(response.data.results || response.data);
     } catch (error) {
-      showError('Failed to add treatment');
+      showError(error.response?.data?.detail || 'Failed to add treatment');
     } finally {
       setSubmitting(false);
     }
@@ -182,18 +201,26 @@ const Treatments = () => {
             {loading ? (
               <LoadingSpinner size="md" fullHeight={false} />
             ) : (
-              <Table columns={columns} data={treatments} isResponsive={true} />
+              <Table 
+                columns={columns} 
+                data={treatments} 
+                isResponsive={true}
+                onRowClick={(treatment) => {
+                  setSelectedTreatment(treatment);
+                  setDetailModalOpen(true);
+                }}
+              />
             )}
           </Card.Body>
         </Card>
       </div>
 
-      {/* Add Treatment Modal */}
       <Modal
         isOpen={addModalOpen}
         onClose={() => {
           setAddModalOpen(false);
           reset();
+          setImageFile(null);
         }}
         title="Record New Treatment"
         size="lg"
@@ -204,6 +231,7 @@ const Treatments = () => {
               onClick={() => {
                 setAddModalOpen(false);
                 reset();
+                setImageFile(null);
               }}
             >
               Cancel
@@ -218,7 +246,7 @@ const Treatments = () => {
           <Select
             label="Patient"
             options={patients.map(p => ({
-              value: p.id,
+              value: p.user_id,
               label: `${p.first_name} ${p.last_name}${p.email ? ` (${p.email})` : ''}`
             }))}
             {...register('patient', { required: 'Patient is required' })}
@@ -259,10 +287,80 @@ const Treatments = () => {
 
           <FileUpload
             label="Upload Image (optional)"
-            onUpload={(file) => console.log('Image:', file)}
+            onUpload={(file) => setImageFile(file)}
             helperText="Max 5MB"
           />
         </form>
+      </Modal>
+
+      {/* Treatment Detail Modal */}
+      <Modal
+        isOpen={detailModalOpen}
+        onClose={() => {
+          setDetailModalOpen(false);
+          setSelectedTreatment(null);
+        }}
+        title="Treatment Details"
+        size="lg"
+        footer={
+          <Button
+            variant="secondary"
+            onClick={() => {
+              setDetailModalOpen(false);
+              setSelectedTreatment(null);
+            }}
+          >
+            Close
+          </Button>
+        }
+      >
+        {selectedTreatment && (
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <p className="text-sm text-gray-600">Patient</p>
+                <p className="font-medium">{selectedTreatment.patient_name}</p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-600">Type</p>
+                <p className="font-medium">{selectedTreatment.treatment_type}</p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-600">Status</p>
+                <Badge variant={selectedTreatment.status === 'COMPLETED' ? 'success' : 'info'}>
+                  {selectedTreatment.status}
+                </Badge>
+              </div>
+              <div>
+                <p className="text-sm text-gray-600">Date</p>
+                <p className="font-medium">{formatDate(selectedTreatment.created_at)}</p>
+              </div>
+            </div>
+            
+            <div>
+              <p className="text-sm text-gray-600">Treatment Information</p>
+              <p className="font-medium">{selectedTreatment.treatment_information}</p>
+            </div>
+
+            {selectedTreatment.treatment_findings && (
+              <div>
+                <p className="text-sm text-gray-600">Findings</p>
+                <p className="font-medium">{selectedTreatment.treatment_findings}</p>
+              </div>
+            )}
+
+            {selectedTreatment.upload_image && (
+              <div>
+                <p className="text-sm text-gray-600 mb-2">Treatment Image</p>
+                <img 
+                  src={getImageUrl(selectedTreatment.upload_image)}
+                  alt="Treatment" 
+                  className="rounded-lg max-h-96 w-full object-cover"
+                />
+              </div>
+            )}
+          </div>
+        )}
       </Modal>
     </MainLayout>
   );

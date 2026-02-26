@@ -101,8 +101,16 @@ export const treatmentService = {
   getById: (id) =>
     api.get(`/treatments/${id}/`),
 
-  create: (data) =>
-    api.post('/treatments/', data),
+  create: (data) => {
+    // If data is FormData (e.g., with file upload), don't set Content-Type header
+    // Axios will auto-set the boundary headers; this avoids conflicts
+    if (data instanceof FormData) {
+      return api.post('/treatments/', data, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+    }
+    return api.post('/treatments/', data);
+  },
 
   update: (id, data) =>
     api.patch(`/treatments/${id}/`, data),
