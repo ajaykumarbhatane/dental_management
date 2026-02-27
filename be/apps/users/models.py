@@ -44,7 +44,6 @@ class CustomUser(AbstractUser):
     ROLE_CHOICES = [
         ('ADMIN', 'Clinic Administrator'),
         ('DOCTOR', 'Doctor/Orthodontist'),
-        ('PATIENT', 'Patient'),
     ]
 
     # Override default username field to use email
@@ -66,7 +65,7 @@ class CustomUser(AbstractUser):
     role = models.CharField(
         max_length=20,
         choices=ROLE_CHOICES,
-        default='PATIENT',
+        default='DOCTOR',
         db_index=True,
         help_text='User role determines access permissions'
     )
@@ -171,8 +170,12 @@ class CustomUser(AbstractUser):
         return self.role == 'DOCTOR'
 
     def is_patient(self):
-        """Check if user is a patient."""
-        return self.role == 'PATIENT'
+        """Patients are no longer stored in CustomUser; always returns False.
+
+        This method remains only for compatibility with older code and should
+        not be used in new development.
+        """
+        return False
 
     @property
     def full_contact_info(self):

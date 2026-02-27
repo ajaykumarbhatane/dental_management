@@ -71,9 +71,13 @@ class IsSameClinic(permissions.BasePermission):
     def has_permission(self, request, view):
         """
         Check if user belongs to a clinic.
-        All authenticated users should have a clinic assigned.
+        Superusers/admins without clinic assignment can still access.
         """
-        return request.user and request.user.is_authenticated and request.user.clinic is not None
+        return (
+            request.user 
+            and request.user.is_authenticated 
+            and (request.user.clinic is not None or request.user.is_superuser)
+        )
 
     def has_object_permission(self, request, view, obj):
         """

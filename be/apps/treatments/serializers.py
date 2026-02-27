@@ -52,7 +52,7 @@ class TreatmentSerializer(serializers.ModelSerializer):
     """
     Serializer for Treatment model.
     
-    Includes doctor and patient information.
+    Includes patient and doctor information.
     """
     patient_name = serializers.CharField(source='patient.get_full_name', read_only=True)
     patient_email = serializers.CharField(source='patient.email', read_only=True)

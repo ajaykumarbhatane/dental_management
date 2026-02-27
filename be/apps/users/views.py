@@ -48,7 +48,12 @@ class AuthViewSet(viewsets.ViewSet):
 
     @action(detail=False, methods=['post'], permission_classes=[AllowAny])
     def register(self, request):
-        """Register a new user."""
+        """
+        Register a new doctor or admin user.
+        
+        NOTE: Patients are managed separately as records without credentials.
+        Use the /api/patients/ endpoint to create patient records.
+        """
         serializer = UserRegistrationSerializer(data=request.data)
         if serializer.is_valid():
             user = serializer.save()
@@ -132,6 +137,25 @@ class AuthViewSet(viewsets.ViewSet):
         return APIResponse.success(
             data=CustomUserSerializer(user).data,
             message='Profile retrieved successfully'
+        )
+
+    @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated])
+    def doctors(self, request):
+        """List doctors belonging to the same clinic as the requester.
+
+        Used by front‑end when assigning a doctor to a patient or other
+        clinic‑scoped operations. Superusers without a clinic will receive
+        all doctors.
+        """
+        qs = CustomUser.objects.filter(role='DOCTOR', is_active=True)
+        # filter by clinic unless superuser
+        if request.user.clinic and not request.user.is_superuser:
+            qs = qs.filter(clinic=request.user.clinic)
+        # Use the standard serializer
+        serializer = CustomUserSerializer(qs, many=True)
+        return APIResponse.success(
+            data=serializer.data,
+            message='Doctors retrieved successfully'
         )
 
     @action(detail=False, methods=['put'], permission_classes=[IsAuthenticated])

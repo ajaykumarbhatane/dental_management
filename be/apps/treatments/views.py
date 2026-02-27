@@ -85,7 +85,15 @@ class TreatmentViewSet(viewsets.ModelViewSet):
     def get_serializer_context(self):
         """Add clinic to serializer context for validation."""
         context = super().get_serializer_context()
-        context['clinic'] = self.request.user.clinic
+        # For superusers without a clinic, require clinic_id in the request
+        if self.request.user.clinic:
+            context['clinic'] = self.request.user.clinic
+        elif 'clinic' in self.request.data:
+            from apps.clinics.models import Clinic
+            try:
+                context['clinic'] = Clinic.objects.get(id=self.request.data['clinic'])
+            except:
+                context['clinic'] = None
         return context
 
     def get_permissions(self):

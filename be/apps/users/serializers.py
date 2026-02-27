@@ -76,7 +76,6 @@ class UserDetailSerializer(serializers.ModelSerializer):
     """
     clinic = serializers.SerializerMethodField()
     is_doctor = serializers.SerializerMethodField()
-    is_patient = serializers.SerializerMethodField()
     is_admin = serializers.SerializerMethodField()
 
     class Meta:
@@ -94,7 +93,6 @@ class UserDetailSerializer(serializers.ModelSerializer):
             'degree',
             'is_active',
             'is_doctor',
-            'is_patient',
             'is_admin',
             'created_at',
             'updated_at',
@@ -113,9 +111,6 @@ class UserDetailSerializer(serializers.ModelSerializer):
         """Check if user is a doctor."""
         return obj.is_doctor()
 
-    def get_is_patient(self, obj):
-        """Check if user is a patient."""
-        return obj.is_patient()
 
     def get_is_admin(self, obj):
         """Check if user is an admin."""
@@ -126,16 +121,17 @@ class UserRegistrationSerializer(serializers.Serializer):
     """
     Serializer for user registration.
     
+    Only DOCTOR and ADMIN roles can be registered (patients don't have credentials).
     Validates and creates a new user account.
     """
-    email = serializers.EmailField()
-    first_name = serializers.CharField(max_length=150)
-    last_name = serializers.CharField(max_length=150)
+    email = serializers.EmailField(required=True, allow_blank=False, error_messages={'blank': 'Email is required.', 'required': 'Email is required.'})
+    first_name = serializers.CharField(max_length=150, required=True)
+    last_name = serializers.CharField(max_length=150, required=True)
     contact_number = serializers.CharField(max_length=20, validators=[validate_phone_number])
-    password = serializers.CharField(write_only=True, min_length=8)
+    password = serializers.CharField(write_only=True, min_length=8, error_messages={'min_length': 'Password must be at least 8 characters.'})
     password_confirm = serializers.CharField(write_only=True, min_length=8)
-    clinic_id = serializers.IntegerField()
-    role = serializers.ChoiceField(choices=['DOCTOR', 'PATIENT', 'ADMIN'])
+    clinic_id = serializers.IntegerField(required=True, error_messages={'required': 'Clinic is required.', 'null': 'Please select a clinic.'})
+    role = serializers.ChoiceField(choices=['DOCTOR', 'ADMIN'], error_messages={'invalid_choice': 'Role must be DOCTOR or ADMIN. Patients are managed separately.'})
     degree = serializers.CharField(required=False, allow_blank=True)
     secondary_contact_number = serializers.CharField(
         required=False,
@@ -145,9 +141,9 @@ class UserRegistrationSerializer(serializers.Serializer):
     address = serializers.CharField(required=False, allow_blank=True)
 
     def validate_email(self, value):
-        """Ensure email is unique if provided."""
-        if not value:
-            return value
+        """Ensure email is unique and not blank."""
+        if not value or not value.strip():
+            raise serializers.ValidationError('Email is required.')
         if CustomUser.objects.filter(email=value).exists():
             raise serializers.ValidationError('Email already registered.')
         return value
@@ -166,7 +162,11 @@ class UserRegistrationSerializer(serializers.Serializer):
             clinic = Clinic.objects.get(id=data['clinic_id'])
         except Clinic.DoesNotExist:
             raise serializers.ValidationError(
-                {'clinic_id': 'Clinic not found.'}
+                {'clinic_id': 'Clinic not found. Please select a valid clinic.'}
+            )
+        except (ValueError, TypeError):
+            raise serializers.ValidationError(
+                {'clinic_id': 'Please select a clinic.'}
             )
 
         # Remove confirm password from validated data
@@ -195,16 +195,6 @@ class UserRegistrationSerializer(serializers.Serializer):
         user.set_password(password)
         user.save()
 
-        # if registering a patient, create associated PatientProfile
-        if user.role == 'PATIENT':
-            try:
-                from apps.patients.models import PatientProfile
-                # only create if not exist
-                if not hasattr(user, 'patient_profile'):
-                    PatientProfile.objects.create(user=user, clinic=clinic)
-            except ImportError:
-                # patients app may not be available in some contexts
-                pass
 
         return user
 

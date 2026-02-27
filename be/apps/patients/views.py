@@ -1,22 +1,26 @@
 """
-ViewSets for patients app.
+ViewSets for standalone Patient model.
 
 Provides:
-- Patient profile management
-- Medical history access
+- Patient CRUD operations
+- Doctor assignment
+- Filtering and search
+- Medical history management
 """
 
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
-from apps.patients.models import PatientProfile
+from django_filters import rest_framework as filters
+from apps.patients.models import Patient
 from apps.patients.serializers import (
-    PatientProfileSerializer,
+    PatientSerializer,
     PatientDetailSerializer,
+    PatientCreateSerializer,
     PatientUpdateSerializer,
 )
-from core.permissions import IsPatient, IsClinicAdmin, IsSameClinic, IsOwnerOrClinicAdmin
+from core.permissions import IsSameClinic, IsClinicAdmin, IsDoctorOrClinicAdmin
 from core.utils import filter_by_user_clinic
 from core.exceptions import APIResponse
 import logging
@@ -24,107 +28,176 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-class PatientProfileViewSet(viewsets.ModelViewSet):
+class PatientFilter(filters.FilterSet):
+    """Custom filters for patients."""
+
+    assigned_doctor = filters.NumberFilter(field_name='assigned_doctor__id')
+
+    class Meta:
+        model = Patient
+        fields = ['assigned_doctor']
+
+
+class PatientViewSet(viewsets.ModelViewSet):
     """
-    ViewSet for Patient Profile management.
+    ViewSet for Patient management.
     
     Endpoints:
     - GET /api/patients/ - List patients in user's clinic
-    - POST /api/patients/ - Create patient profile (admin only)
-    - GET /api/patients/{id}/ - Get patient profile
-    - PUT /api/patients/{id}/ - Update patient profile (own or admin)
-    - GET /api/patients/{id}/medical-summary/ - Get medical summary
+    - POST /api/patients/ - Create patient (admin only)
+    - GET /api/patients/{id}/ - Get patient details
+    - PUT /api/patients/{id}/ - Update patient
+    - DELETE /api/patients/{id}/ - Delete patient (soft delete)
+    - GET /api/patients/{id}/assign-doctor/ - Assign doctor to patient
     """
 
-    serializer_class = PatientProfileSerializer
+    serializer_class = PatientSerializer
     permission_classes = [IsAuthenticated, IsSameClinic]
-    filterset_fields = ['gender', 'clinic']
-    search_fields = ['user__first_name', 'user__last_name', 'user__email']
-    ordering_fields = ['user__first_name', 'created_at']
+    filterset_class = PatientFilter
+    search_fields = ['first_name', 'last_name']
+    ordering_fields = ['first_name', 'last_name', 'created_at']
     ordering = ['-created_at']
 
     def get_queryset(self):
         """Filter patients by user's clinic."""
-        return filter_by_user_clinic(PatientProfile.objects.all(), self.request)
+        return filter_by_user_clinic(Patient.objects.all(), self.request)
 
     def get_serializer_class(self):
-        """Use detailed serializer for retrieve actions."""
-        if self.action == 'retrieve':
-            return PatientDetailSerializer
-        elif self.action in ['partial_update', 'update']:
+        """Use appropriate serializer for different actions."""
+        if self.action == 'create':
+            return PatientCreateSerializer
+        elif self.action in ['update', 'partial_update']:
             return PatientUpdateSerializer
-        return PatientProfileSerializer
+        elif self.action == 'retrieve':
+            return PatientDetailSerializer
+        return PatientSerializer
+
+    def get_serializer_context(self):
+        """Add clinic to serializer context for validation."""
+        context = super().get_serializer_context()
+        
+        # Try to get clinic from user's clinic assignment
+        clinic = self.request.user.clinic
+        
+        # If user doesn't have a clinic, check request data for clinic_id
+        if not clinic and self.action == 'create':
+            clinic_id = self.request.data.get('clinic_id')
+            if clinic_id:
+                from apps.clinics.models import Clinic
+                try:
+                    clinic = Clinic.objects.get(id=clinic_id)
+                except:
+                    # Let serializer handle the error with proper validation message
+                    clinic = None
+        
+        # Add clinic to context if found
+        if clinic:
+            context['clinic'] = clinic
+        
+        return context
 
     def get_permissions(self):
         """
         Customize permissions per action.
         
-        - Create/delete: Clinic admin
-        - Update: Patient (own) or clinic admin
+        - Create: Clinic admin
+        - Update: Clinic admin or doctor managing patient
+        - Delete: Clinic admin
         - Read: Clinic members
         """
         if self.action == 'create':
-            permission_classes = [IsAuthenticated, IsClinicAdmin]
+            # Allow both clinic admins and doctors to create patients
+            permission_classes = [IsAuthenticated, IsDoctorOrClinicAdmin, IsSameClinic]
         elif self.action in ['update', 'partial_update']:
             permission_classes = [IsAuthenticated, IsSameClinic]
         elif self.action == 'destroy':
-            permission_classes = [IsAuthenticated, IsClinicAdmin]
+            permission_classes = [IsAuthenticated, IsClinicAdmin, IsSameClinic]
         else:
             permission_classes = [IsAuthenticated, IsSameClinic]
 
         return [permission() for permission in permission_classes]
 
     def check_object_permissions(self, request, obj):
-        """Additional permission checks for object access."""
+        """Additional permission checks for object modification."""
         super().check_object_permissions(request, obj)
 
-        # Patient can only update their own profile
-        if request.method in ['PUT', 'PATCH'] and request.user.is_patient():
-            if obj.user != request.user:
-                self.permission_denied(
-                    request,
-                    message='You can only update your own profile'
-                )
+        # No extra restrictions: doctors are allowed to update patients in their clinic.
 
     def perform_create(self, serializer):
-        """Create patient profile."""
+        """Create patient record."""
         serializer.save()
 
     def perform_update(self, serializer):
-        """Update patient profile."""
+        """Update patient record."""
         serializer.save()
 
-    @action(detail=True, methods=['get'], permission_classes=[IsAuthenticated, IsSameClinic])
-    def medical_summary(self, request, pk=None):
-        """Get compact medical summary for patient."""
+    def perform_destroy(self, instance):
+        """Delete patient record."""
+        instance.delete()
+
+    @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated, IsClinicAdmin, IsSameClinic])
+    def assign_doctor(self, request, pk=None):
+        """Assign a doctor to a patient."""
         try:
             patient = self.get_object()
-            self.check_object_permissions(request, patient)
+            doctor_id = request.data.get('doctor_id')
 
+            if not doctor_id:
+                return APIResponse.error(
+                    message='doctor_id is required',
+                    code='missing_doctor_id',
+                    status_code=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Validate doctor exists and belongs to same clinic
+            from apps.users.models import CustomUser
+            try:
+                doctor = CustomUser.objects.get(
+                    id=doctor_id,
+                    clinic=request.user.clinic,
+                    role='DOCTOR'
+                )
+            except CustomUser.DoesNotExist:
+                return APIResponse.error(
+                    message='Doctor not found in your clinic',
+                    code='doctor_not_found',
+                    status_code=status.HTTP_404_NOT_FOUND
+                )
+
+            patient.assigned_doctor = doctor
+            patient.save()
+
+            serializer = PatientDetailSerializer(patient)
             return APIResponse.success(
-                data=patient.get_medical_summary(),
-                message='Medical summary retrieved'
+                data=serializer.data,
+                message=f'Doctor {doctor.get_full_name()} assigned to patient'
             )
-        except PatientProfile.DoesNotExist:
+        except Patient.DoesNotExist:
             return APIResponse.error(
                 message='Patient not found',
                 code='patient_not_found',
                 status_code=status.HTTP_404_NOT_FOUND
             )
 
-    @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated, IsPatient])
-    def my_profile(self, request):
-        """Get current patient's own profile."""
-        try:
-            patient = request.user.patient_profile
-            serializer = PatientDetailSerializer(patient)
-            return APIResponse.success(
-                data=serializer.data,
-                message='Your profile retrieved'
-            )
-        except PatientProfile.DoesNotExist:
+    @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated, IsSameClinic])
+    def my_patients(self, request):
+        """Get patients assigned to the current doctor."""
+        if not request.user.is_doctor():
             return APIResponse.error(
-                message='Patient profile not found',
-                code='patient_profile_not_found',
-                status_code=status.HTTP_404_NOT_FOUND
+                message='Only doctors can view their assigned patients',
+                code='not_a_doctor',
+                status_code=status.HTTP_403_FORBIDDEN
             )
+
+        patients = self.get_queryset().filter(assigned_doctor=request.user)
+
+        page = self.paginate_queryset(patients)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+
+        serializer = self.get_serializer(patients, many=True)
+        return APIResponse.success(
+            data=serializer.data,
+            message='Your assigned patients retrieved'
+        )

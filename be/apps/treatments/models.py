@@ -71,10 +71,9 @@ class Treatment(models.Model):
 
     # Patient reference
     patient = models.ForeignKey(
-        'users.CustomUser',
+        'patients.Patient',
         on_delete=models.CASCADE,
         related_name='treatments',
-        limit_choices_to={'role': 'PATIENT'},
         db_index=True,
         help_text='Patient receiving the treatment'
     )

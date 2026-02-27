@@ -32,15 +32,22 @@ def filter_by_user_clinic(queryset, request):
     Filter queryset by the clinic of the authenticated user.
     
     This is the core function for multi-tenant data isolation.
+    Superusers/admins without a clinic can see all records.
     
     Args:
         queryset: Django QuerySet to filter
         request: HTTP request object
     
     Returns:
-        Filtered QuerySet containing only records from user's clinic
+        Filtered QuerySet containing only records from user's clinic,
+        or all records if user is a superuser
     """
     clinic = get_user_clinic(request)
+    
+    # Superusers can see all records
+    if request.user and request.user.is_superuser:
+        return queryset
+    
     if clinic:
         return queryset.filter(clinic=clinic)
     return queryset.none()  # No clinic = no access
