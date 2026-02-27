@@ -8,8 +8,12 @@ import Avatar from '../components/Avatar';
 import LoadingSpinner from '../components/LoadingSpinner';
 import Table from '../components/Table';
 import Modal from '../components/Modal';
+import Input from '../components/Input';
+import Select from '../components/Select';
+import Textarea from '../components/Textarea';
 import { patientService } from '../services/api';
 import { useToast } from '../hooks';
+import { useForm } from 'react-hook-form';
 import { formatDate } from '../utils/helpers';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api';
@@ -30,12 +34,41 @@ const PatientDetail = () => {
   const [loading, setLoading] = useState(true);
   const [selectedTreatment, setSelectedTreatment] = useState(null);
   const [treatmentDetailOpen, setTreatmentDetailOpen] = useState(false);
+  const [editModalOpen, setEditModalOpen] = useState(false);
+
+  const { register, handleSubmit, reset, formState: { errors } } = useForm({
+    defaultValues: {
+      first_name: '',
+      last_name: '',
+      email: '',
+      contact_number: '',
+      secondary_contact_number: '',
+      address: '',
+      gender: '',
+      date_of_birth: '',
+      clinical_history: '',
+      notes: '',
+    },
+  });
 
   useEffect(() => {
     const fetchPatient = async () => {
       try {
         const response = await patientService.getById(id);
         setPatient(response.data);
+        // populate form for edit
+        reset({
+          first_name: response.data.first_name || '',
+          last_name: response.data.last_name || '',
+          email: response.data.email || '',
+          contact_number: response.data.contact_number || '',
+          secondary_contact_number: response.data.secondary_contact_number || '',
+          address: response.data.address || '',
+          gender: response.data.gender || '',
+          date_of_birth: response.data.date_of_birth || '',
+          clinical_history: response.data.clinical_history || '',
+          notes: response.data.notes || '',
+        });
       } catch (error) {
         showError('Failed to load patient');
         navigate('/patients');
@@ -45,7 +78,7 @@ const PatientDetail = () => {
     };
 
     fetchPatient();
-  }, [id]);
+  }, [id, reset]);
 
   if (loading) {
     return <LoadingSpinner />;
@@ -100,6 +133,34 @@ const PatientDetail = () => {
     },
   ];
 
+  const handleEdit = async (data) => {
+    setLoading(true);
+    try {
+      const payload = {
+        first_name: data.first_name,
+        last_name: data.last_name,
+        email: data.email || null,
+        contact_number: data.contact_number || null,
+        secondary_contact_number: data.secondary_contact_number || null,
+        address: data.address || null,
+        gender: data.gender || null,
+        date_of_birth: data.date_of_birth || null,
+        clinical_history: data.clinical_history || null,
+        notes: data.notes || null,
+      };
+      await patientService.update(id, payload);
+      success('Patient updated successfully');
+      setEditModalOpen(false);
+      // refresh patient
+      const response = await patientService.getById(id);
+      setPatient(response.data);
+    } catch (err) {
+      showError('Failed to update patient');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <MainLayout>
       <div>
@@ -112,7 +173,10 @@ const PatientDetail = () => {
               <p className="text-gray-600">{patient.email}</p>
             </div>
           </div>
-          <Avatar name={`${patient.first_name} ${patient.last_name}`} size="lg" />
+          <div className="flex items-center gap-4">
+            <Button onClick={() => setEditModalOpen(true)}>Edit</Button>
+            <Avatar name={`${patient.first_name} ${patient.last_name}`} size="lg" />
+          </div>
         </div>
 
         {/* Tabs */}
@@ -150,11 +214,15 @@ const PatientDetail = () => {
             <Card.Body className="space-y-4">
               <div>
                 <p className="text-sm text-gray-600">Email</p>
-                <p className="font-medium">{patient.email}</p>
+                <p className="font-medium">{patient.email || 'Not provided'}</p>
               </div>
               <div>
-                <p className="text-sm text-gray-600">Phone</p>
-                <p className="font-medium">{patient.phone || 'Not provided'}</p>
+                <p className="text-sm text-gray-600">Contact Number</p>
+                <p className="font-medium">{patient.contact_number || 'Not provided'}</p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-600">Secondary Contact</p>
+                <p className="font-medium">{patient.secondary_contact_number || 'Not provided'}</p>
               </div>
               <div>
                 <p className="text-sm text-gray-600">Address</p>
@@ -166,19 +234,15 @@ const PatientDetail = () => {
           {/* Medical History */}
           <Card>
             <Card.Header>
-              <h3 className="font-semibold text-gray-900">Medical History</h3>
+              <h3 className="font-semibold text-gray-900">Medical Info</h3>
             </Card.Header>
             <Card.Body className="space-y-4">
               <div>
-                <p className="text-sm text-gray-600">Allergies</p>
-                <p className="font-medium">{patient.allergies || 'None reported'}</p>
+                <p className="text-sm text-gray-600">Clinical History</p>
+                <p className="font-medium text-sm">{patient.clinical_history || 'None reported'}</p>
               </div>
               <div>
-                <p className="text-sm text-gray-600">Medications</p>
-                <p className="font-medium text-sm">{patient.current_medications || 'Not specified'}</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-600">Notes</p>
+                <p className="text-sm text-gray-600">Additional Notes</p>
                 <p className="font-medium text-sm">{patient.notes || 'No notes'}</p>
               </div>
             </Card.Body>
@@ -319,6 +383,135 @@ const PatientDetail = () => {
             )}
           </div>
         )}
+      </Modal>
+
+      {/* Edit Patient Modal */}
+      <Modal
+        isOpen={editModalOpen}
+        onClose={() => setEditModalOpen(false)}
+        title="Edit Patient"
+        size="lg"
+        footer={
+          <>
+            <Button
+              variant="secondary"
+              onClick={() => setEditModalOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button onClick={handleSubmit(handleEdit)}>Save Changes</Button>
+          </>
+        }
+      >
+        <form className="space-y-4 max-h-96 overflow-y-auto">
+          {/* Basic Information */}
+          <div>
+            <h3 className="font-semibold text-gray-700 mb-3">Basic Information</h3>
+            <div className="grid grid-cols-2 gap-3">
+              <Input
+                label="First Name *"
+                placeholder="Enter First Name"
+                {...register('first_name', { required: 'First name is required' })}
+                error={errors.first_name?.message}
+                container="mb-0"
+              />
+              <Input
+                label="Last Name *"
+                placeholder="Enter Last Name"
+                {...register('last_name', { required: 'Last name is required' })}
+                error={errors.last_name?.message}
+                container="mb-0"
+              />
+            </div>
+          </div>
+
+          {/* Contact Information */}
+          <div>
+            <h3 className="font-semibold text-gray-700 mb-3">Contact Information</h3>
+            <div className="space-y-3">
+              <Input
+                label="Email"
+                placeholder="Enter email address"
+                type="email"
+                {...register('email')}
+                error={errors.email?.message}
+                container="mb-0"
+              />
+              <div className="grid grid-cols-2 gap-3">
+                <Input
+                  label="Contact Number"
+                  placeholder="+91 12345 67890"
+                  {...register('contact_number')}
+                  error={errors.contact_number?.message}
+                  container="mb-0"
+                />
+                <Input
+                  label="Secondary Contact"
+                  placeholder="+91 12345 67891"
+                  {...register('secondary_contact_number')}
+                  error={errors.secondary_contact_number?.message}
+                  container="mb-0"
+                />
+              </div>
+              <Textarea
+                label="Address"
+                placeholder="Enter patient address"
+                {...register('address')}
+                error={errors.address?.message}
+                container="mb-0"
+                rows="2"
+              />
+            </div>
+          </div>
+
+          {/* Personal Information */}
+          <div>
+            <h3 className="font-semibold text-gray-700 mb-3">Personal Information</h3>
+            <div className="grid grid-cols-2 gap-3">
+              <Select
+                label="Gender"
+                {...register('gender')}
+                error={errors.gender?.message}
+                container="mb-0"
+              >
+                <option value="">Select Gender</option>
+                <option value="MALE">Male</option>
+                <option value="FEMALE">Female</option>
+                <option value="OTHER">Other</option>
+              </Select>
+              <Input
+                label="Date of Birth"
+                type="date"
+                {...register('date_of_birth')}
+                error={errors.date_of_birth?.message}
+                container="mb-0"
+              />
+            </div>
+          </div>
+
+          {/* Medical Information */}
+          <div>
+            <h3 className="font-semibold text-gray-700 mb-3">Medical Information</h3>
+            <div className="space-y-3">
+              <Textarea
+                label="Clinical History"
+                placeholder="Enter clinical history and notes"
+                {...register('clinical_history')}
+                error={errors.clinical_history?.message}
+                container="mb-0"
+                rows="2"
+              />
+              <Textarea
+                label="Additional Notes"
+                placeholder="Any additional notes about the patient"
+                {...register('notes')}
+                error={errors.notes?.message}
+                container="mb-0"
+                rows="2"
+              />
+            </div>
+          </div>
+        </form>
       </Modal>
     </MainLayout>
   );

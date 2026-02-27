@@ -25,6 +25,8 @@ const Select = React.forwardRef(
               {opt.label}
             </option>
           ))}
+          {/* Render any children passed (allows JSX <option> elements) */}
+          {props.children}
         </select>
         {error && <p className="text-red-500 text-sm mt-1">{error}</p>}
         {helperText && <p className="text-gray-500 text-sm mt-1">{helperText}</p>}

@@ -50,7 +50,11 @@ export const useAuth = () => {
       setUser(userData);
       return respData;
     } catch (error) {
-      const message = error.response?.data?.detail || 'Login failed';
+      const message = 
+        error.response?.data?.error?.message ||
+        error.response?.data?.detail ||
+        error.message ||
+        'Login failed';
       setError(message);
       throw error;
     } finally {

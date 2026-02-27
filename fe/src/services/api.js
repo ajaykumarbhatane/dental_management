@@ -142,4 +142,12 @@ export const clinicService = {
     api.patch(`/clinics/${id}/`, data),
 };
 
+// ============================================
+// USER SERVICES
+// ============================================
+
+export const userService = {
+  getDoctors: () => api.get('/auth/doctors/'),
+};
+
 export default api;

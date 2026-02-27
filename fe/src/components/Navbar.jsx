@@ -30,7 +30,7 @@ const Navbar = () => {
           </button>
 
           <div>
-            <h2 className="text-sm text-gray-500">Welcome,</h2>
+            <h2 className="text-sm text-gray-500">Welcome to,</h2>
             <p className="text-gray-900 font-semibold">{user?.clinic_name || 'Clinic'}</p>
           </div>
         </div>
@@ -56,12 +56,12 @@ const Navbar = () => {
               className="flex items-center gap-2 p-2 hover:bg-gray-100 rounded-lg transition-smooth"
             >
               <Avatar
-                name={`${user?.first_name || ''} ${user?.last_name || ''}`}
+                name={`Dr.${user?.first_name || ''} ${user?.last_name || ''}`}
                 size="sm"
               />
               <div className="hidden sm:block text-left">
                 <p className="text-sm font-medium text-gray-900">
-                  {user?.first_name} {user?.last_name}
+                  Dr. {user?.first_name} {user?.last_name}
                 </p>
                 <p className="text-xs text-gray-500">{user?.role || 'User'}</p>
               </div>

@@ -32,7 +32,12 @@ const Login = () => {
       success('Login successful!');
       navigate('/dashboard');
     } catch (err) {
-      showError(err.response?.data?.detail || 'Login failed');
+      const errorMessage = 
+        err.response?.data?.error?.message ||
+        err.response?.data?.detail ||
+        err.message ||
+        'Login failed';
+      showError(errorMessage);
     } finally {
       setLoading(false);
     }

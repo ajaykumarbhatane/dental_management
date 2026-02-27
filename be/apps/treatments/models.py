@@ -109,6 +109,8 @@ class Treatment(models.Model):
     )
 
     # Image Upload (Before/After documentation)
+    # *legacy* single-image field retained for backward compatibility.
+    # New images should use the VisitImage model below.
     upload_image = models.ImageField(
         upload_to='treatments/',
         blank=True,
@@ -118,7 +120,7 @@ class Treatment(models.Model):
         ],
         help_text='Treatment documentation image (max 5MB)'
     )
-
+*** End Patch
     # Schedule
     next_visit_date = models.DateTimeField(
         blank=True,

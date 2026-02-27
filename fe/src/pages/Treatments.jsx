@@ -94,7 +94,7 @@ const Treatments = () => {
     setSubmitting(true);
     try {
       const formData = new FormData();
-      formData.append('patient', parseInt(data.patient, 10)); // Convert to integer
+      formData.append('patient', data.patient); // Direct Patient ID
       formData.append('treatment_type', data.treatment_type);
       formData.append('status', data.status);
       formData.append('next_visit_date', data.next_visit_date);
@@ -246,7 +246,7 @@ const Treatments = () => {
           <Select
             label="Patient"
             options={patients.map(p => ({
-              value: p.user_id,
+              value: p.id,
               label: `${p.first_name} ${p.last_name}${p.email ? ` (${p.email})` : ''}`
             }))}
             {...register('patient', { required: 'Patient is required' })}
